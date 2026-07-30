@@ -1,0 +1,63 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import type { Block } from '@/lib/blocks';
+
+const slugOf = (p: { data: { slug?: string }; id: string }) => p.data.slug ?? p.id;
+const posts = (await getCollection('posts')).sort((a, b) => (b.data.date ?? '').localeCompare(a.data.date ?? ''));
+
+// Match the rest of the site's theme/font/colors (taken from the home page).
+const pages = await getCollection('pages');
+const home = pages.find((p) => slugOf(p) === 'home');
+const settings = ((home?.data.blocks ?? []) as unknown as Block[]).find((b) => b.kind === 'siteSettings');
+const themeId = settings?.kind === 'siteSettings' ? settings.themeId : undefined;
+const fontId = settings?.kind === 'siteSettings' ? settings.fontId : undefined;
+const primaryColor = settings?.kind === 'siteSettings' ? settings.primaryColor : undefined;
+const secondaryColor = settings?.kind === 'siteSettings' ? settings.secondaryColor : undefined;
+const backgroundColor = settings?.kind === 'siteSettings' ? settings.backgroundColor : undefined;
+const lightPrimaryColor = settings?.kind === 'siteSettings' ? settings.lightPrimaryColor : undefined;
+const lightSecondaryColor = settings?.kind === 'siteSettings' ? settings.lightSecondaryColor : undefined;
+const lightBackgroundColor = settings?.kind === 'siteSettings' ? settings.lightBackgroundColor : undefined;
+const darkPrimaryColor = settings?.kind === 'siteSettings' ? settings.darkPrimaryColor : undefined;
+const darkSecondaryColor = settings?.kind === 'siteSettings' ? settings.darkSecondaryColor : undefined;
+const darkBackgroundColor = settings?.kind === 'siteSettings' ? settings.darkBackgroundColor : undefined;
+const appearanceModeEnabled = settings?.kind === 'siteSettings' ? settings.appearanceModeEnabled : undefined;
+const logoUrl = settings?.kind === 'siteSettings' ? settings.logoUrl : undefined;
+const pageWidth = settings?.kind === 'siteSettings' ? settings.pageWidth : undefined;
+const withBasePath = (value: string) => `${(import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')}${value.replace(/^\/+/, '')}`;
+const assetUrl = (value: string) => /^(https?:|data:|blob:)/i.test(value) || value.startsWith('//') || !value.startsWith('/') ? value : withBasePath(value);
+---
+<BaseLayout title="Blog" themeId={themeId} fontId={fontId} primaryColor={primaryColor} secondaryColor={secondaryColor} backgroundColor={backgroundColor} lightPrimaryColor={lightPrimaryColor} lightSecondaryColor={lightSecondaryColor} lightBackgroundColor={lightBackgroundColor} darkPrimaryColor={darkPrimaryColor} darkSecondaryColor={darkSecondaryColor} darkBackgroundColor={darkBackgroundColor} appearanceModeEnabled={appearanceModeEnabled} logoUrl={logoUrl} pageWidth={pageWidth}>
+  <section class="mx-auto max-w-6xl px-6 py-20 md:py-28">
+    <div class="mx-auto max-w-3xl text-center">
+      <p class="text-sm font-medium uppercase tracking-[0.24em] text-clay">Stories</p>
+      <h1 class="display-xl mt-3 text-ink">Blog</h1>
+    </div>
+    {posts.length === 0 && <p class="mt-8 text-center text-ink-soft">No posts yet.</p>}
+    {posts.length > 0 && (
+      <ul class="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {posts.map((post) => {
+          const image = post.data.coverImage ?? post.data.ogImage;
+          const summary = post.data.excerpt ?? post.data.description;
+          return (
+            <li class="h-full">
+              <a href={withBasePath(`/blog/${slugOf(post)}/`)} class="group flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface shadow-soft transition-transform duration-200 hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-clay">
+                {image ? (
+                  <img src={assetUrl(image)} alt={post.data.coverImageAlt ?? ''} class="aspect-[4/3] w-full object-cover" loading="lazy" decoding="async" />
+                ) : (
+                  <div class="grid aspect-[4/3] place-items-center bg-canvas text-sm text-ink-soft">No image added</div>
+                )}
+                <div class="flex flex-1 flex-col p-5">
+                  {post.data.date && <p class="text-xs font-medium uppercase tracking-[0.16em] text-clay">{post.data.date}</p>}
+                  <h2 class="mt-2 font-display text-2xl font-semibold leading-tight text-ink transition-colors group-hover:text-clay">{post.data.title}</h2>
+                  {summary && <p class="mt-3 text-sm leading-6 text-ink-soft">{summary}</p>}
+                  <span class="mt-auto pt-5 text-sm font-semibold text-clay">Read post</span>
+                </div>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    )}
+  </section>
+</BaseLayout>

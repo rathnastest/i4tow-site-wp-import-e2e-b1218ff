@@ -1,0 +1,192 @@
+---
+import '@/styles/global.css';
+import { getCollection } from 'astro:content';
+import { ClientRouter } from 'astro:transitions';
+import { LoadingScreen } from '@/components/motion';
+import { Nav, type NavLink } from '@/components/Nav';
+import templateMeta from '../../.i4tow/template.json';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+  themeId?: string;
+  fontId?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  backgroundColor?: string;
+  lightPrimaryColor?: string;
+  lightSecondaryColor?: string;
+  lightBackgroundColor?: string;
+  darkPrimaryColor?: string;
+  darkSecondaryColor?: string;
+  darkBackgroundColor?: string;
+  appearanceModeEnabled?: boolean;
+  logoUrl?: string;
+  pageWidth?: 'contained' | 'full';
+}
+const {
+  title, description, ogImage, themeId = 'warmArtStudio', fontId = 'dmSans',
+  primaryColor, secondaryColor, backgroundColor,
+  lightPrimaryColor, lightSecondaryColor, lightBackgroundColor,
+  darkPrimaryColor, darkSecondaryColor, darkBackgroundColor,
+  appearanceModeEnabled = true,
+  logoUrl = 'https://i4tow.date/demo-logo.svg',
+  pageWidth = 'contained',
+} = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+const withBasePath = (value: string) => {
+  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
+  return `${base}${value.replace(/^\/+/, '')}`;
+};
+
+// Nav + brand are derived from the actual published pages, so they reflect
+// what exists (no hardcoded About/Curriculum/Contact that 404).
+const allPages = await getCollection('pages');
+const allPosts = await getCollection('posts');
+const pageSlug = (p: { data: { slug?: string }; id: string }) => p.data.slug ?? p.id;
+const homePage = allPages.find((p) => pageSlug(p) === 'home');
+const siteName = homePage?.data.title?.trim() || 'Home';
+const navLinks: NavLink[] = allPages
+  .filter((p) => pageSlug(p) !== 'home')
+  .map((p) => ({ label: p.data.title, href: withBasePath(`/${pageSlug(p)}/`) }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+if (allPosts.length > 0) navLinks.push({ label: 'Blog', href: withBasePath('/blog/') });
+
+const fullTitle = title === siteName ? title : `${title} – ${siteName}`;
+const normalizeColor = (value: unknown) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : undefined;
+const hexToRgb = (hex: string) => {
+  const value = hex.replace('#', '');
+  return { r: parseInt(value.slice(0, 2), 16), g: parseInt(value.slice(2, 4), 16), b: parseInt(value.slice(4, 6), 16) };
+};
+const rgbToHex = ({ r, g, b }: { r: number; g: number; b: number }) => `#${[r, g, b].map((value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0')).join('')}`;
+const mixColors = (a: string, b: string, amount: number) => {
+  const first = hexToRgb(a);
+  const second = hexToRgb(b);
+  return rgbToHex({
+    r: first.r + (second.r - first.r) * amount,
+    g: first.g + (second.g - first.g) * amount,
+    b: first.b + (second.b - first.b) * amount,
+  });
+};
+const readableInk = (color: string) => {
+  const { r, g, b } = hexToRgb(color);
+  return (r * 0.299 + g * 0.587 + b * 0.114) > 160 ? '#1f1712' : '#fffaf3';
+};
+const luminance = (hex: string) => {
+  const { r, g, b } = hexToRgb(hex);
+  const channel = (value: number) => {
+    const normalized = value / 255;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+};
+const contrastRatio = (a: string, b: string) => {
+  const first = luminance(a);
+  const second = luminance(b);
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+const readableSoftInk = (secondary: string, background: string, ink: string) =>
+  contrastRatio(secondary, background) >= 4.5 ? secondary : mixColors(background, ink, 0.74);
+const makePalette = (primary: string, secondary: string, background: string) => {
+  const ink = readableInk(background);
+  const inkSoft = readableSoftInk(secondary, background, ink);
+  return {
+    canvas: background,
+    surface: mixColors(background, ink === '#1f1712' ? '#ffffff' : '#000000', 0.08),
+    ink,
+    inkSoft,
+    clay: primary,
+    clayDeep: mixColors(primary, ink, 0.24),
+    line: mixColors(background, primary, 0.22),
+  };
+};
+const light = makePalette(
+  normalizeColor(lightPrimaryColor) ?? normalizeColor(primaryColor) ?? '#9a5a3c',
+  normalizeColor(lightSecondaryColor) ?? normalizeColor(secondaryColor) ?? '#6a4635',
+  normalizeColor(lightBackgroundColor) ?? normalizeColor(backgroundColor) ?? '#fff8ef',
+);
+const dark = makePalette(
+  normalizeColor(darkPrimaryColor) ?? '#d49a72',
+  normalizeColor(darkSecondaryColor) ?? '#e7c7aa',
+  normalizeColor(darkBackgroundColor) ?? '#1f1712',
+);
+const appearanceConfig = { enabled: appearanceModeEnabled, light, dark };
+const resolvedLogoUrl = withBasePath(logoUrl);
+const homeHref = withBasePath('/');
+const siteCommit = import.meta.env.PUBLIC_I4TOW_SITE_COMMIT?.slice(0, 7);
+const TEMPLATE_LABEL = `${templateMeta.version}.r${templateMeta.revision}`;
+const footerTemplateLabel = siteCommit ? `${TEMPLATE_LABEL} • ${siteCommit}` : TEMPLATE_LABEL;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script is:inline define:vars={{ appearanceConfig }}>
+      document.documentElement.classList.add('js');
+      (function () {
+        var config = appearanceConfig;
+        var root = document.documentElement;
+        var key = 'i4tow.site.appearance';
+        function chosenMode(choice) {
+          if (!config.enabled) return 'light';
+          if (choice === 'dark' || choice === 'light') return choice;
+          return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        function apply(choice) {
+          var mode = chosenMode(choice);
+          var palette = config[mode] || config.light;
+          Object.keys(palette).forEach(function (name) {
+            var cssName = name === 'inkSoft' ? 'ink-soft' : name === 'clayDeep' ? 'clay-deep' : name;
+            root.style.setProperty('--color-' + cssName, palette[name]);
+          });
+          root.dataset.appearance = mode;
+          root.dataset.appearanceChoice = config.enabled ? (choice || 'system') : 'light';
+          root.style.colorScheme = mode;
+        }
+        window.__i4towApplyAppearance = apply;
+        window.__i4towAppearanceConfig = config;
+        apply(localStorage.getItem(key) || 'system');
+      })();
+    </script>
+    <title>{fullTitle}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:url" content={canonical} />
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href={resolvedLogoUrl} />
+    <link rel="apple-touch-icon" href={resolvedLogoUrl} />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;700&family=Lato:wght@400;700&family=Montserrat:wght@400;500;700&family=Poppins:wght@400;500;700&family=Inter:wght@400;500;700&family=Oswald:wght@400;500;700&family=Raleway:wght@400;500;700&family=Noto+Sans:wght@400;500;700&family=Source+Sans+3:wght@400;500;700&family=Ubuntu:wght@400;500;700&family=Nunito+Sans:wght@400;500;700&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;600;700&family=Roboto+Slab:wght@400;600;700&family=Rubik:wght@400;500;700&family=PT+Sans:wght@400;700&family=Work+Sans:wght@400;500;700&family=Mulish:wght@400;500;700&family=Roboto+Condensed:wght@400;700&family=Noto+Serif:wght@400;700&family=Libre+Baskerville:wght@400;700&family=Cormorant+Garamond:wght@400;600;700&family=Quicksand:wght@400;500;700&display=swap"
+    />
+    <ClientRouter />
+  </head>
+  <body data-site-font={fontId}>
+    <LoadingScreen client:load transition:persist />
+
+    <Nav brand={siteName} links={navLinks} homeHref={homeHref} logoUrl={resolvedLogoUrl} pageWidth={pageWidth} appearanceModeEnabled={appearanceModeEnabled} light={light} dark={dark} client:load />
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="border-t border-line bg-surface/50">
+      <div class="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-12 text-sm text-ink-soft sm:flex-row sm:items-end sm:justify-between">
+        <p class="font-display text-base text-ink">{siteName}</p>
+        <p class="text-[0.68rem] text-ink-soft/45">{footerTemplateLabel}</p>
+      </div>
+    </footer>
+  </body>
+</html>

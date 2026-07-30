@@ -1,0 +1,50 @@
+---
+import { getCollection } from 'astro:content';
+import { marked } from 'marked';
+import DOMPurify from 'isomorphic-dompurify';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { BlockRenderer } from '@/components/blocks';
+import type { Block } from '@/lib/blocks';
+
+const BODY_TAGS = ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 's', 'a', 'ul', 'ol', 'li', 'blockquote', 'h2', 'h3', 'h4', 'code', 'pre', 'hr'];
+const ALLOWED_ATTR = ['href', 'title'];
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts');
+  return posts.map((post) => ({ params: { slug: post.data.slug ?? post.id }, props: { entry: post } }));
+}
+
+const { entry } = Astro.props;
+const blocks = (entry.data.blocks ?? []) as unknown as Block[];
+const settings = blocks.find((block) => block.kind === 'siteSettings');
+const themeId = settings?.kind === 'siteSettings' ? settings.themeId : undefined;
+const fontId = settings?.kind === 'siteSettings' ? settings.fontId : undefined;
+const primaryColor = settings?.kind === 'siteSettings' ? settings.primaryColor : undefined;
+const secondaryColor = settings?.kind === 'siteSettings' ? settings.secondaryColor : undefined;
+const backgroundColor = settings?.kind === 'siteSettings' ? settings.backgroundColor : undefined;
+const lightPrimaryColor = settings?.kind === 'siteSettings' ? settings.lightPrimaryColor : undefined;
+const lightSecondaryColor = settings?.kind === 'siteSettings' ? settings.lightSecondaryColor : undefined;
+const lightBackgroundColor = settings?.kind === 'siteSettings' ? settings.lightBackgroundColor : undefined;
+const darkPrimaryColor = settings?.kind === 'siteSettings' ? settings.darkPrimaryColor : undefined;
+const darkSecondaryColor = settings?.kind === 'siteSettings' ? settings.darkSecondaryColor : undefined;
+const darkBackgroundColor = settings?.kind === 'siteSettings' ? settings.darkBackgroundColor : undefined;
+const appearanceModeEnabled = settings?.kind === 'siteSettings' ? settings.appearanceModeEnabled : undefined;
+const logoUrl = settings?.kind === 'siteSettings' ? settings.logoUrl : undefined;
+const pageWidth = settings?.kind === 'siteSettings' ? settings.pageWidth : undefined;
+const descriptionHtml = entry.data.description
+  ? DOMPurify.sanitize(marked.parse(entry.data.description, { async: false }) as string, { ALLOWED_TAGS: BODY_TAGS, ALLOWED_ATTR })
+  : '';
+const descriptionAlign = entry.data.descriptionAlign ?? 'center';
+const withBasePath = (value: string) => `${(import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')}${value.replace(/^\/+/, '')}`;
+const assetUrl = (value: string) => /^(https?:|data:|blob:)/i.test(value) || value.startsWith('//') || !value.startsWith('/') ? value : withBasePath(value);
+---
+<BaseLayout title={entry.data.title} description={entry.data.description} ogImage={entry.data.coverImage ?? entry.data.ogImage} themeId={themeId} fontId={fontId} primaryColor={primaryColor} secondaryColor={secondaryColor} backgroundColor={backgroundColor} lightPrimaryColor={lightPrimaryColor} lightSecondaryColor={lightSecondaryColor} lightBackgroundColor={lightBackgroundColor} darkPrimaryColor={darkPrimaryColor} darkSecondaryColor={darkSecondaryColor} darkBackgroundColor={darkBackgroundColor} appearanceModeEnabled={appearanceModeEnabled} logoUrl={logoUrl} pageWidth={pageWidth}>
+  <article class="mx-auto max-w-4xl px-6 py-20 md:py-28">
+    <h1 class="display-xl mx-auto max-w-3xl text-center text-ink">{entry.data.title}</h1>
+    {descriptionHtml && <div class="rich-body mx-auto mt-6 max-w-2xl text-lg text-ink-soft" style={`text-align: ${descriptionAlign}`} set:html={descriptionHtml} />}
+    {entry.data.coverImage && (
+      <img src={assetUrl(entry.data.coverImage)} alt={entry.data.coverImageAlt ?? ''} class="mt-12 aspect-[16/9] w-full rounded-[var(--radius-card)] object-cover shadow-soft" loading="eager" decoding="async" />
+    )}
+  </article>
+  <BlockRenderer blocks={blocks} client:load />
+</BaseLayout>
